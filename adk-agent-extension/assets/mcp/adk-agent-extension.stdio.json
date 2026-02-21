@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "adk-agent-extension": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/adk-agent-extension/dist/google-adk-agent-extension.js"
+      ],
+      "env": {}
+    }
+  }
+}

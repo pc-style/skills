@@ -16,11 +16,15 @@ State machine per task:
 #!/usr/bin/env bash
 # Dependency-aware parallel task scheduler
 
+# Resolve paths to verification scripts
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 declare -A TASK_STATUS    # id → pending|running|done|failed|abandoned
 declare -A TASK_DEPS      # id → "dep1,dep2,dep3"
 declare -A TASK_WRITES    # id → "file1,file2"
 declare -A TASK_PIDS      # id → PID
 declare -A TASK_PROMPTS   # id → prompt text
+TASK_COMPLEXITY="medium"  # small|medium|large — used by diff verification
 
 MAX_PARALLEL=6
 TMPDIR=$(mktemp -d)
@@ -90,11 +94,54 @@ reap_finished() {
     local pid="${TASK_PIDS[$id]}"
     if ! kill -0 "$pid" 2>/dev/null; then
       wait "$pid"
-      if (( $? == 0 )); then
-        TASK_STATUS[$id]="done"
-      else
+      local exit_code=$?
+
+      if (( exit_code != 0 )); then
         TASK_STATUS[$id]="failed"
+        continue
       fi
+
+      # --- Diff-Based Verification (Upgrade #7) ---
+      # Before marking done, verify the diff is clean:
+      #   - No secrets/credentials introduced
+      #   - Only declared write targets modified
+      #   - Diff size proportional to task complexity
+      local verify_exit=0
+      if [[ -x "$SCRIPT_DIR/diff-verify.sh" ]]; then
+        "$SCRIPT_DIR/diff-verify.sh" \
+          "$TMPDIR" \
+          "$TMPDIR/$id-results" \
+          "${TASK_WRITES[$id]//,/ }" \
+          "${TASK_COMPLEXITY:-medium}" || verify_exit=$?
+      fi
+
+      case $verify_exit in
+        0)
+          # Diff clean — now run the full quality gate
+          local gate_exit=0
+          "$SCRIPT_DIR/../quality-gate.sh" \
+            "$TMPDIR" \
+            "$TMPDIR/$id-results" \
+            "${TASK_WRITES[$id]//,/ }" \
+            "${TASK_COMPLEXITY:-medium}" || gate_exit=$?
+
+          if (( gate_exit == 0 )); then
+            TASK_STATUS[$id]="done"
+          else
+            TASK_STATUS[$id]="failed"
+          fi
+          ;;
+        2)
+          # SECRETS FOUND — hard block, already auto-reverted
+          echo "BLOCKED: Secrets detected in $id — changes reverted"
+          TASK_STATUS[$id]="failed"
+          ;;
+        *)
+          # Rogue edits or oversized diff — already auto-reverted
+          echo "REJECTED: Diff verification failed for $id — changes reverted"
+          TASK_STATUS[$id]="failed"
+          ;;
+      esac
     fi
   done
 }

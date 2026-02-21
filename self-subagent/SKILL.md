@@ -260,7 +260,274 @@ npx tsc --noEmit && npm test && npm run lint
 
 Only proceed to the next wave if validation passes.
 
-### 4e. Proceed to next wave
+### 4e. Diff-Based Verification (Pre-Merge)
+
+**Before running the quality gate, verify the diff itself is safe to merge.**
+
+The `diff-verify.sh` script performs three checks on the raw `git diff`:
+
+| Check | What | Action on Failure |
+|-------|------|-------------------|
+| **Secret Scan** | Scans added lines for API keys, tokens, credentials | Hard block (exit 2) + auto-revert |
+| **Rogue Edit Detection** | Flags files modified outside declared targets | Reject (exit 1) + auto-revert |
+| **Diff Proportionality** | Checks total changes vs task complexity threshold | Reject (exit 1) + auto-revert |
+
+#### Secret Detection Patterns
+
+Scans for 25+ patterns across:
+- **Generic**: `api_key`, `secret`, `password`, `token`, `private_key`
+- **Provider-specific**: OpenAI (`sk-`), GitHub (`ghp_`, `gho_`, `ghs_`), AWS (`AKIA`), Stripe (`sk_live_`), Slack (`xox`), Google (`AIza`), SendGrid (`SG.`)
+- **Structural**: PEM private keys, connection strings with embedded credentials
+- **Suspicious markers**: `TODO.*remove.*key`, `FIXME.*secret`
+
+Allowlist exempts: `process.env`, `os.environ`, shell variable refs, `placeholder`, `test_key`, `mock_secret`
+
+#### Usage
+
+```bash
+# Standalone
+./skill/diff-verify.sh <subagent_dir> <results_dir> <expected_files> [complexity]
+
+# Exit codes: 0=PASS, 1=FAIL, 2=SECRETS_FOUND
+
+# Integrated (called automatically by quality-gate.sh Phase 0)
+./skill/quality-gate.sh <subagent_dir> <results_dir> <expected_files> [complexity]
+# Now runs diff verification FIRST, then quality scoring
+```
+
+#### Auto-Revert
+
+On any verification failure, changes are automatically reverted:
+```bash
+git checkout -- .   # revert tracked changes
+git clean -fd       # remove untracked files
+```
+
+This ensures the working directory is clean before:
+- Retrying the subagent with error context
+- Proceeding to the next wave
+- Falling back to inline execution
+
+#### Exit Code Chain
+
+| quality-gate.sh exit | Meaning | What Happened |
+|---------------------|---------|---------------|
+| 0 | ACCEPT | Diff clean + score >= 6 |
+| 1 | REJECT | Diff failed OR score < 6 |
+| 2 | SECRETS_FOUND | Hard block, auto-reverted |
+
+### 4f. Quality Gate
+
+**Before accepting any subagent's output, score it 0-10 on three criteria:**
+
+#### Gate Criteria
+
+| Criterion | Weight | Check |
+|-----------|--------|-------|
+| **File Scope** | 4 pts | Only modified declared files, no rogue edits |
+| **Validation** | 4 pts | Typecheck/lint/tests pass |
+| **Diff Size** | 2 pts | Diff proportional to task complexity |
+
+#### Scoring Algorithm
+
+```bash
+#!/usr/bin/env bash
+# quality-gate.sh - Score subagent output before merging
+
+SUBAGENT_DIR="$1"      # Temp worktree or directory
+RESULTS_DIR="$2"       # Where to save scores
+EXPECTED_FILES="$3"    # Space-separated list of expected modified files
+TASK_COMPLEXITY="${4:-medium}"  # small|medium|large
+
+cd "$SUBAGENT_DIR"
+
+SCORE=10
+FAILURES=""
+
+# 1. File Scope Check (4 points)
+MODIFIED=$(git diff --name-only 2>/dev/null | sort)
+UNEXPECTED=0
+MISSING=0
+
+for file in $MODIFIED; do
+  if [[ ! " $EXPECTED_FILES " =~ " $file " ]]; then
+    UNEXPECTED=$((UNEXPECTED + 1))
+    FAILURES="${FAILURES}UNEXPECTED: $file\n"
+  fi
+done
+
+for expected in $EXPECTED_FILES; do
+  if ! echo "$MODIFIED" | grep -q "^$expected$"; then
+    MISSING=$((MISSING + 1))
+    FAILURES="${FAILURES}MISSING: $expected\n"
+  fi
+done
+
+if [[ $UNEXPECTED -gt 0 || $MISSING -gt 0 ]]; then
+  SCORE=$((SCORE - 4))
+  echo "⚠️  File scope violation: $UNEXPECTED unexpected, $MISSING missing"
+fi
+
+# 2. Validation Check (4 points)
+VALIDATION_FAILED=0
+
+# TypeScript
+if command -v npx >/dev/null 2>&1; then
+  if ! npx tsc --noEmit 2>&1 | head -20; then
+    SCORE=$((SCORE - 2))
+    VALIDATION_FAILED=1
+    FAILURES="${FAILURES}TypeScript compilation failed\n"
+    echo "❌ TypeScript compilation failed"
+  fi
+fi
+
+# Lint
+if [[ -f "package.json" ]] && grep -q '"lint"' package.json 2>/dev/null; then
+  if ! npm run lint 2>&1 | tail -10; then
+    SCORE=$((SCORE - 1))
+    VALIDATION_FAILED=1
+    FAILURES="${FAILURES}Lint failed\n"
+    echo "❌ Lint failed"
+  fi
+fi
+
+# Tests
+if [[ -f "package.json" ]] && grep -q '"test"' package.json 2>/dev/null; then
+  if ! npm test 2>&1 | tail -10; then
+    SCORE=$((SCORE - 1))
+    VALIDATION_FAILED=1
+    FAILURES="${FAILURES}Tests failed\n"
+    echo "❌ Tests failed"
+  fi
+fi
+
+# 3. Diff Size Check (2 points)
+DIFF_LINES=$(git diff --stat 2>/dev/null | tail -1 | awk '{print $1}')
+
+# Thresholds by complexity
+if [[ "$TASK_COMPLEXITY" == "small" ]]; then
+  MAX_LINES=50
+elif [[ "$TASK_COMPLEXITY" == "large" ]]; then
+  MAX_LINES=500
+else
+  MAX_LINES=200  # medium
+fi
+
+if [[ $DIFF_LINES -gt $MAX_LINES ]]; then
+  SCORE=$((SCORE - 2))
+  FAILURES="${FAILURES}Diff too large: $DIFF_LINES lines (max $MAX_LINES for $TASK_COMPLEXITY task)\n"
+  echo "⚠️  Diff size: $DIFF_LINES lines exceeds threshold ($MAX_LINES)"
+fi
+
+# Clamp to 0-10
+[[ $SCORE -lt 0 ]] && SCORE=0
+[[ $SCORE -gt 10 ]] && SCORE=10
+
+# Save results
+echo "$SCORE" > "$RESULTS_DIR/quality_score"
+cat > "$RESULTS_DIR/quality_report.txt" << EOF
+Quality Gate Report
+===================
+Score: $SCORE/10
+
+Criteria:
+- File Scope: $([[ $UNEXPECTED -eq 0 && $MISSING -eq 0 ]] && echo "PASS" || echo "FAIL") ($UNEXPECTED unexpected, $MISSING missing)
+- Validation: $([[ $VALIDATION_FAILED -eq 0 ]] && echo "PASS" || echo "FAIL")
+- Diff Size: $DIFF_LINES lines $([[ $DIFF_LINES -le $MAX_LINES ]] && echo "(PASS)" || echo "(FAIL - max $MAX_LINES)")
+
+Failures:
+${FAILURES:-None}
+
+Modified Files:
+$(git diff --name-only 2>/dev/null || echo "N/A")
+EOF
+
+# Decision
+echo ""
+echo "╔════════════════════════════════════╗"
+echo "║     QUALITY GATE: $SCORE/10        ║"
+echo "╚════════════════════════════════════╝"
+
+if [[ $SCORE -ge 6 ]]; then
+  echo "✅ ACCEPT: Changes meet quality threshold"
+  exit 0
+else
+  echo "❌ REJECT: Changes below quality threshold"
+  echo "   Options:"
+  echo "   1. Retry subagent with error context"
+  echo "   2. Do task inline (parent handles it)"
+  exit 1
+fi
+```
+
+#### Usage in Wave Execution
+
+```bash
+# After collecting subagent results
+for id in "${TASK_NAMES[@]}"; do
+  # Run quality gate on each subagent's output
+  if quality-gate.sh "$TMPDIR/$id-worktree" "$RESULTS_DIR" "${TASK_WRITES[$id]}" "medium"; then
+    # Merge changes
+    git merge "subagent/$id" --no-edit
+  else
+    # Retry once, then abandon
+    FAILED_TASKS+=("$id")
+  fi
+done
+
+# Only proceed if all tasks passed quality gate
+if [[ ${#FAILED_TASKS[@]} -gt 0 ]]; then
+  echo "❌ Wave failed quality gate for: ${FAILED_TASKS[*]}"
+  # Retry or handle inline
+fi
+```
+
+#### Decision Matrix
+
+| Score | Action |
+|-------|--------|
+| 10 | Perfect - merge immediately |
+| 8-9 | Good - merge with note |
+| 6-7 | Acceptable - merge, monitor next wave |
+| 5 | Borderline - retry with context |
+| <5 | Reject - retry once, then do inline |
+
+#### Integration with Retry
+
+When retrying a failed quality gate:
+
+```bash
+retry_with_quality_context() {
+  local id="$1"
+  local original_prompt="$2"
+  local quality_report=$(cat "$RESULTS_DIR/$id/quality_report.txt")
+  
+  RETRY_PROMPT="$original_prompt
+
+QUALITY GATE FAILED (Score: $(cat $RESULTS_DIR/$id/quality_score)/10)
+
+Issues to fix:
+$quality_report
+
+Please address these issues and ensure:
+1. Only modify the declared target files
+2. All validation passes (typecheck, lint, tests)
+3. Keep changes focused and proportional to the task"
+
+  # Retry with enhanced prompt
+  timeout 300 $AGENT_CMD "$RETRY_PROMPT" > "$TMPDIR/$id.retry.out" 2>&1
+}
+```
+
+#### Rules
+
+1. **Score < 6 = Reject** - Don't merge low-quality changes
+2. **Retry once** - Give subagent a chance to fix with context
+3. **After 2 failures, do inline** - Parent takes over
+4. **Log all scores** - Track quality trends across waves
+5. **Fail fast** - Reject early, don't waste time on bad output
+
+### 4g. Proceed to next wave
 
 Clear PIDs, spawn the next wave's tasks (whose dependencies are now met), repeat 4a-4d.
 
