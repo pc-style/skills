@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import shutil
+import shlex
+import subprocess
+import sys
+
+
+DEFAULT_MODELS = {
+    "fast": os.environ.get("AIDR_MODEL_FAST", "gemini-2.5-flash-lite"),
+    "universal": os.environ.get("AIDR_MODEL_UNIVERSAL", "gemini-3-flash-preview"),
+    "advanced": os.environ.get("AIDR_MODEL_ADVANCED", "gemini-3-flash-preview-2"),
+}
+
+LEGACY_ALIASES = {
+    "map": "scan",
+    "find": "scan",
+    "retrieve": "scan",
+    "explain": "scan",
+    "refactor": "patch",
+    "task": "run",
+}
+
+
+def build_base_command(mode: str, dry_run: bool, yes: bool, passthrough: list[str]) -> list[str]:
+    model = DEFAULT_MODELS[mode]
+    cmd = ["aider", "--model", model, "--no-auto-commits", "--no-dirty-commits"]
+    if dry_run:
+        cmd.append("--dry-run")
+    if yes:
+        cmd.append("--yes")
+    cmd.extend(passthrough)
+    return cmd
+
+
+def run_aider(message: str, files: list[str], mode: str, dry_run: bool, yes: bool, passthrough: list[str]) -> int:
+    cmd = build_base_command(mode=mode, dry_run=dry_run, yes=yes, passthrough=passthrough)
+    cmd.extend(["--message", message])
+    cmd.extend(files)
+
+    print("[aidr] exec:", " ".join(shlex.quote(c) for c in cmd), file=sys.stderr)
+    try:
+        result = subprocess.run(cmd)
+    except FileNotFoundError:
+        print("[aidr] error: `aider` not found. Run setup: bash skills/aidr/scripts/setup.sh", file=sys.stderr)
+        return 127
+    return result.returncode
+
+
+def run_raw(cmd: list[str]) -> int:
+    print("[aidr] exec:", " ".join(shlex.quote(c) for c in cmd), file=sys.stderr)
+    try:
+        result = subprocess.run(cmd)
+    except FileNotFoundError:
+        print("[aidr] error: `aider` not found. Run setup: bash skills/aidr/scripts/setup.sh", file=sys.stderr)
+        return 127
+    return result.returncode
+
+
+def scan_message(style: str, goal: str) -> str:
+    if style == "map":
+        return (
+            "Produce a concise repository map: important directories, key modules, and where major concerns "
+            "(api, auth, db, config, tests) are implemented. Return paths with one-line notes. Do not edit files."
+        )
+    if style == "find":
+        return (
+            f"Find locations relevant to: {goal}. Return only concrete file paths and short evidence snippets. "
+            "Do not edit files."
+        )
+    if style == "retrieve":
+        return (
+            f"Retrieve focused context for: {goal}. Return the minimum set of files, symbols, and why they matter. "
+            "Do not edit files."
+        )
+    if style == "explain":
+        return (
+            f"Explain this code topic: {goal}. Include key files/functions and control flow in concise bullets. "
+            "Do not edit files."
+        )
+    return (
+        f"Goal: {goal}. Scan the codebase and return only the minimum useful context to proceed: exact paths, "
+        "symbols, and one-line relevance notes. Do not edit files."
+    )
+
+
+def parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="aidr", description="Thin Aider wrapper for agent context offloading")
+    p.add_argument("--mode", choices=["fast", "universal", "advanced"], default="universal")
+    p.add_argument("--yes", action="store_true", help="Auto-confirm prompts")
+    p.add_argument("--dry-run", action="store_true", help="Preview without modifying files")
+    p.add_argument("--aider-args", default="", help="Extra raw args forwarded to aider")
+
+    sub = p.add_subparsers(dest="command", required=True)
+
+    scan_p = sub.add_parser("scan", help="Read-only codebase discovery for a goal")
+    scan_p.add_argument("goal", nargs="?", default="repository overview")
+    scan_p.add_argument("paths", nargs="*", default=[])
+
+    sub.add_parser("models", help="List available Gemini models from provider")
+
+    sub.add_parser("doctor", help="Check local setup and required environment")
+
+    patch_p = sub.add_parser("patch", help="Small scoped edits; dry-run by default")
+    patch_p.add_argument("goal")
+    patch_p.add_argument("paths", nargs="*", default=[])
+    patch_p.add_argument("--apply", action="store_true", help="Apply edits instead of dry-run")
+
+    run_p = sub.add_parser("run", help="Universal freeform task")
+    run_p.add_argument("goal")
+    run_p.add_argument("paths", nargs="*", default=[])
+    run_p.add_argument("--apply", action="store_true", help="Apply edits instead of dry-run")
+
+    map_p = sub.add_parser("map", help="Legacy alias for scan")
+    map_p.add_argument("paths", nargs="*", default=[])
+
+    find_p = sub.add_parser("find", help="Legacy alias for scan")
+    find_p.add_argument("query")
+    find_p.add_argument("paths", nargs="*", default=[])
+
+    ret_p = sub.add_parser("retrieve", help="Legacy alias for scan")
+    ret_p.add_argument("query")
+    ret_p.add_argument("paths", nargs="*", default=[])
+
+    exp_p = sub.add_parser("explain", help="Legacy alias for scan")
+    exp_p.add_argument("query")
+    exp_p.add_argument("paths", nargs="*", default=[])
+
+    ref_p = sub.add_parser("refactor", help="Legacy alias for patch")
+    ref_p.add_argument("instruction")
+    ref_p.add_argument("paths", nargs="*", default=[])
+    ref_p.add_argument("--apply", action="store_true", help="Apply edits instead of dry-run")
+
+    task_p = sub.add_parser("task", help="Legacy alias for run")
+    task_p.add_argument("instruction")
+    task_p.add_argument("paths", nargs="*", default=[])
+    task_p.add_argument("--apply", action="store_true", help="Apply edits instead of dry-run")
+
+    return p
+
+
+def main() -> int:
+    p = parser()
+    args = p.parse_args()
+    passthrough = shlex.split(args.aider_args) if args.aider_args else []
+
+    command = args.command
+    if command in LEGACY_ALIASES:
+        mapped = LEGACY_ALIASES[command]
+        print(f"[aidr] note: `{command}` is deprecated, using `{mapped}`", file=sys.stderr)
+        command = mapped
+
+    if command == "models":
+        cmd = ["aider", "--list-models", "gemini/"]
+        cmd.extend(passthrough)
+        return run_raw(cmd)
+
+    if command == "doctor":
+        ok = True
+        aider_bin = shutil.which("aider")
+        uv_bin = shutil.which("uv")
+        gemini_key = bool(os.environ.get("GEMINI_API_KEY"))
+
+        print(f"aider: {'ok' if aider_bin else 'missing'}{f' ({aider_bin})' if aider_bin else ''}")
+        print(f"uv: {'ok' if uv_bin else 'missing'}{f' ({uv_bin})' if uv_bin else ''}")
+        print(f"GEMINI_API_KEY: {'set' if gemini_key else 'missing'}")
+        print(f"models.fast: {DEFAULT_MODELS['fast']}")
+        print(f"models.universal: {DEFAULT_MODELS['universal']}")
+        print(f"models.advanced: {DEFAULT_MODELS['advanced']}")
+
+        if not aider_bin or not gemini_key:
+            ok = False
+        if not ok:
+            print("[aidr] doctor: setup incomplete. Run: bash skills/aidr/scripts/setup.sh", file=sys.stderr)
+            return 1
+        return 0
+
+    if command == "scan":
+        if args.command == "map":
+            style = "map"
+            goal = "repository overview"
+            paths = args.paths
+        elif args.command in {"find", "retrieve", "explain"}:
+            style = args.command
+            goal = args.query
+            paths = args.paths
+        else:
+            style = "scan"
+            goal = args.goal
+            paths = args.paths
+        msg = scan_message(style=style, goal=goal)
+        return run_aider(msg, paths, args.mode, dry_run=True, yes=args.yes, passthrough=passthrough)
+
+    if command == "patch":
+        if args.command == "refactor":
+            goal = args.instruction
+            paths = args.paths
+            apply_edits = args.apply
+        else:
+            goal = args.goal
+            paths = args.paths
+            apply_edits = args.apply
+        dry_run = args.dry_run or (not apply_edits)
+        reasoning_hint = ""
+        if args.mode == "advanced":
+            reasoning_hint = "Use deeper reasoning and verify edge cases before editing. "
+        msg = (
+            f"{reasoning_hint}Patch request: {goal}. Keep changes minimal and consistent with existing style. "
+            "After edits, summarize changed files and rationale."
+        )
+        return run_aider(msg, paths, args.mode, dry_run=dry_run, yes=args.yes, passthrough=passthrough)
+
+    if command == "run":
+        if args.command == "task":
+            goal = args.instruction
+            paths = args.paths
+            apply_edits = args.apply
+        else:
+            goal = args.goal
+            paths = args.paths
+            apply_edits = args.apply
+        dry_run = args.dry_run or (not apply_edits)
+        reasoning_hint = ""
+        if args.mode == "advanced":
+            reasoning_hint = "Use high reasoning effort and double-check assumptions. "
+        msg = f"{reasoning_hint}Task: {goal}"
+        return run_aider(msg, paths, args.mode, dry_run=dry_run, yes=args.yes, passthrough=passthrough)
+
+    p.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
