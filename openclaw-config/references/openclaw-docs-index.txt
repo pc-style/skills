@@ -1,0 +1,90 @@
+# OpenClaw Docs Index (openclaw.txt)
+# For the latest version, always fetch: https://docs.openclaw.ai/llms.txt
+# This is a cached snapshot. The skill should fetch fresh on every use.
+
+Key documentation URLs by topic:
+
+## Installation
+- Install overview: https://docs.openclaw.ai/install/index.md
+- Docker: https://docs.openclaw.ai/install/docker.md
+- Node.js: https://docs.openclaw.ai/install/node.md
+- Nix: https://docs.openclaw.ai/install/nix.md
+- Fly.io: https://docs.openclaw.ai/install/fly.md
+- GCP: https://docs.openclaw.ai/install/gcp.md
+- Hetzner: https://docs.openclaw.ai/install/hetzner.md
+- Railway: https://docs.openclaw.ai/install/railway.md
+- Render: https://docs.openclaw.ai/install/render.md
+- Northflank: https://docs.openclaw.ai/install/northflank.md
+- exe.dev: https://docs.openclaw.ai/install/exe-dev.md
+- Ansible: https://docs.openclaw.ai/install/ansible.md
+- Podman: https://docs.openclaw.ai/install/podman.md
+
+## Configuration
+- Configuration overview: https://docs.openclaw.ai/gateway/configuration
+- Configuration reference: https://docs.openclaw.ai/gateway/configuration-reference
+- Configuration examples: https://docs.openclaw.ai/gateway/configuration-examples
+- Config schema: https://docs.openclaw.ai/reference/config-schema
+
+## Channels
+- WhatsApp: https://docs.openclaw.ai/channels/whatsapp.md
+- Telegram: https://docs.openclaw.ai/channels/telegram.md
+- Discord: https://docs.openclaw.ai/channels/discord.md
+- Slack: https://docs.openclaw.ai/channels/slack.md
+- Signal: https://docs.openclaw.ai/channels/signal.md
+- iMessage: https://docs.openclaw.ai/channels/imessage.md
+- Google Chat: https://docs.openclaw.ai/channels/googlechat.md
+- Matrix: https://docs.openclaw.ai/channels/matrix.md
+- Mattermost: https://docs.openclaw.ai/channels/mattermost.md
+- MS Teams: https://docs.openclaw.ai/channels/msteams.md
+- IRC: https://docs.openclaw.ai/channels/irc.md
+- Nostr: https://docs.openclaw.ai/channels/nostr.md
+- LINE: https://docs.openclaw.ai/channels/line.md
+
+## Providers
+- OpenAI: https://docs.openclaw.ai/providers/openai.md
+- Anthropic: https://docs.openclaw.ai/providers/anthropic.md
+- Ollama: https://docs.openclaw.ai/providers/ollama.md
+- OpenRouter: https://docs.openclaw.ai/providers/openrouter.md
+- Bedrock: https://docs.openclaw.ai/providers/bedrock.md
+- Mistral: https://docs.openclaw.ai/providers/mistral.md
+- Local models: https://docs.openclaw.ai/gateway/local-models.md
+
+## Gateway & Operations
+- Gateway runbook: https://docs.openclaw.ai/gateway/index.md
+- Sandboxing: https://docs.openclaw.ai/gateway/sandboxing
+- Security: https://docs.openclaw.ai/gateway/security/index.md
+- Secrets: https://docs.openclaw.ai/gateway/secrets.md
+- Remote access: https://docs.openclaw.ai/gateway/remote.md
+- Tailscale: https://docs.openclaw.ai/gateway/tailscale.md
+- Health checks: https://docs.openclaw.ai/gateway/health.md
+- Doctor: https://docs.openclaw.ai/gateway/doctor.md
+- Troubleshooting: https://docs.openclaw.ai/gateway/troubleshooting.md
+
+## Concepts
+- Sessions: https://docs.openclaw.ai/concepts/session.md
+- Multi-agent: https://docs.openclaw.ai/concepts/multi-agent.md
+- Memory: https://docs.openclaw.ai/concepts/memory.md
+- Models: https://docs.openclaw.ai/concepts/models.md
+- OAuth: https://docs.openclaw.ai/concepts/oauth.md
+
+## Automation
+- Cron jobs: https://docs.openclaw.ai/automation/cron-jobs.md
+- Hooks: https://docs.openclaw.ai/automation/hooks.md
+- Webhooks: https://docs.openclaw.ai/automation/webhook.md
+
+## Tools
+- Tools overview: https://docs.openclaw.ai/tools/index.md
+- Browser: https://docs.openclaw.ai/tools/browser.md
+- Skills: https://docs.openclaw.ai/tools/skills.md
+- Sub-agents: https://docs.openclaw.ai/tools/subagents.md
+
+## CLI
+- CLI reference: https://docs.openclaw.ai/cli/index.md
+
+## Platforms
+- macOS: https://docs.openclaw.ai/platforms/macos.md
+- Linux: https://docs.openclaw.ai/platforms/linux.md
+- Windows: https://docs.openclaw.ai/platforms/windows.md
+- iOS: https://docs.openclaw.ai/platforms/ios.md
+- Android: https://docs.openclaw.ai/platforms/android.md
+- Raspberry Pi: https://docs.openclaw.ai/platforms/raspberry-pi.md
