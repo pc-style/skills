@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Create a handoff message to continue work in a new AI session. Use when the user wants to save context for later, create a handoff document, or prepare work for continuation in a fresh session. Captures relevant files, context, and goals so the next session can start immediately without rediscovering the codebase.
+description: Create or resume from a handoff message for continuing work in a new AI session. Use when the user wants to save context for later, create a handoff document, continue from an existing HANDOFF.md, or prepare work for continuation in a fresh session. Captures relevant files, context, and goals so the next session can start immediately without rediscovering the codebase.
 ---
 
 # Handoff

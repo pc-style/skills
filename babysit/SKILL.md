@@ -7,7 +7,7 @@ description: >-
 # Babysit PR
 Your job is to get this PR to a merge-ready state.
 
-Check PR status, comments, and latest CI and resolve any issues until the PR is ready to merge.
+Use `gh` to identify the current branch's PR; if there is no PR, report that babysitting cannot proceed. Check PR status, comments, and latest CI and resolve any issues until the PR is ready to merge.
 
 1. Merge conflicts: Intelligently resolve any merge conflicts, preserving the intent and correctness of changes on your branch and the base branch. If intents conflict, abort the merge and ask for clarification.
 2. Comments: Review active unresolved comments (including Bugbot) and resolve change requests / bug reports where valid. When fetching GitHub comments, filter out resolved threads first. Read only each comment body and the minimum location/URL needed to act on it; do not read the entire JSON output or other unnecessary payload data. Carefully validate issues reported by Bugbot and only take action on those that are valid; explain when you disagree or are unsure.

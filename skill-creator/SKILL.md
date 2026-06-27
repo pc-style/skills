@@ -97,7 +97,7 @@ A skill should only contain essential files that directly support its functional
 - CHANGELOG.md
 - etc.
 
-The skill should only contain the information needed for an AI agent to do the job at hand. It should not contain auxiliary context about the process that went into creating it, setup and testing procedures, user-facing documentation, etc. Creating additional documentation files just adds clutter and confusion.
+The skill should only contain the information needed for an AI agent to do the job at hand. It should not contain auxiliary context about the process that went into creating it, setup and testing procedures, user-facing documentation, etc. Creating additional documentation files just adds clutter and confusion. License files are allowed when required for distribution or attribution.
 
 ### Progressive Disclosure Design Principle
 
@@ -300,15 +300,6 @@ After initialization, customize the SKILL.md and add resources as needed.
 
 When editing the (newly-generated or existing) skill, remember that the skill is being created for another AI instance to use. Include information that would be beneficial and non-obvious to the AI. Consider what procedural knowledge, domain-specific details, or reusable assets would help another AI instance execute these tasks more effectively.
 
-#### Learn Proven Design Patterns
-
-Consult these helpful guides based on your skill's needs:
-
-- **Multi-step processes**: See references/workflows.md for sequential workflows and conditional logic
-- **Specific output formats or quality standards**: See references/output-patterns.md for template and example patterns
-
-These files contain established best practices for effective skill design.
-
 #### Start with Reusable Skill Contents
 
 To begin implementation, start with the reusable resources identified above: `references/` and `assets/` files. Note that this step may require user input. For example, when implementing a `brand-guidelines` skill, the user may need to provide brand assets or templates to store in `assets/`, or documentation to store in `references/`.
@@ -362,19 +353,19 @@ Run these validation checks manually before proceeding to packaging.
 
 ### Step 6: Publishing the Skill
 
-Once validation passes, publish the skill to the skills repository at `/Users/pcstyle/skills/`:
+Once validation passes, publish the skill to the active skills repository. Use the current repository root unless the user specifies a different skills repository path.
 
 **Publishing Process:**
 
-1. **Copy the skill directory** to `/Users/pcstyle/skills/{skill-name}/`
+1. **Copy or update the skill directory** in `{skills-repo}/{skill-name}/`
 2. **Commit and push** the changes to the repository
 
 ```bash
-# Copy skill to the skills repository
-cp -r /path/to/skill/{skill-name} /Users/pcstyle/skills/{skill-name}
+# Copy skill to the skills repository when working outside it
+cp -r /path/to/skill/{skill-name} {skills-repo}/{skill-name}
 
 # Commit and push
-cd /Users/pcstyle/skills
+cd {skills-repo}
 git add {skill-name}/
 git commit -m "feat: add {skill-name} skill"
 git push
@@ -383,9 +374,9 @@ git push
 **When updating an existing skill:**
 ```bash
 # Overwrite existing skill in the repository
-cp -r /path/to/skill/{skill-name} /Users/pcstyle/skills/{skill-name}
+cp -r /path/to/skill/{skill-name} {skills-repo}/{skill-name}
 
-cd /Users/pcstyle/skills
+cd {skills-repo}
 git add {skill-name}/
 git commit -m "feat: update {skill-name} skill"
 git push
